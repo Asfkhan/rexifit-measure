@@ -8,16 +8,21 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^13.5.0",
+    "jspdf": "^4.2.1",
+    "opencv.js": "^1.2.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "react-scripts": "^0.0.0",
+    "react-native-document-scanner-plugin": "^2.0.4",
+    "react-scripts": "5.0.1",
     "web-vitals": "^2.1.4"
   },
   "scripts": {
     "predeploy": "npm run build",
     "deploy": "gh-pages -d build",
     "start": "react-scripts start",
-    "build": "react-scripts build"
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
   },
   "eslintConfig": {
     "extends": [
