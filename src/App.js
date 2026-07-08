@@ -67,7 +67,6 @@ const initSection = () => ({ image: null, measurements: {}, notes: "" });
 
 // ── MAIN COMPONENT ────────────────────────────────────────────────────────────
 export default function RexiFitApp() {
-  // All state declarations
   const [step, setStep] = useState(0);
   const [brand, setBrand] = useState("");
   const [customBrand, setCustomBrand] = useState("");
@@ -80,61 +79,128 @@ export default function RexiFitApp() {
   });
   const [cameraOpen, setCameraOpen] = useState(false);
   const [flash, setFlash] = useState(false);
+  const [capturedImage, setCapturedImage] = useState(null);
+  const [showPreview, setShowPreview] = useState(false);
   
-  // Refs
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
   const fileRef = useRef(null);
 
-  // Memoized values
   const isCoverStep = step >= 1 && step <= 3;
   const coverKey = isCoverStep ? COVER_KEYS[step - 1] : null;
   const coverSec = coverKey ? SECTIONS[coverKey] : null;
   const coverData = coverKey ? sectionData[coverKey] : null;
   const brandName = brand === "Other" ? customBrand : brand;
 
+  // Handle camera stream
+  useEffect(() => {
+    if (cameraOpen && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current;
+      videoRef.current.play().catch(err => console.log('Video play error:', err));
+    }
+  }, [cameraOpen]);
+
   // ── CAMERA FUNCTIONS ──────────────────────────────────────────────────────
   const openCamera = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } },
+        video: { 
+          facingMode: "environment", 
+          width: { ideal: 1920 }, 
+          height: { ideal: 1080 } 
+        },
       });
       streamRef.current = stream;
       setCameraOpen(true);
-    } catch {
-      alert("Camera access denied. Use file upload instead.");
+      setCapturedImage(null);
+      setShowPreview(false);
+    } catch (error) {
+      console.error('Camera error:', error);
+      alert("Camera access denied. Please allow camera access or use file upload instead.");
     }
   }, []);
 
   const stopCamera = useCallback(() => {
-    streamRef.current?.getTracks().forEach(t => t.stop());
-    streamRef.current = null;
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
     setCameraOpen(false);
   }, []);
 
+  // Capture image from camera
   const captureFrame = useCallback(() => {
-    const v = videoRef.current;
-    const c = canvasRef.current;
-    if (!v || !c) return;
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
     
-    c.width = v.videoWidth || 1280;
-    c.height = v.videoHeight || 720;
-    c.getContext("2d").drawImage(v, 0, 0);
-    const dataURL = c.toDataURL("image/jpeg", 0.9);
-    
-    setFlash(true);
-    setTimeout(() => setFlash(false), 220);
-    stopCamera();
-    
-    if (coverKey) {
-      setSectionData(prev => ({
-        ...prev,
-        [coverKey]: { ...prev[coverKey], image: dataURL }
-      }));
+    if (!video || !canvas) {
+      console.error('Video or canvas not ready');
+      return;
     }
-  }, [coverKey, stopCamera]);
 
+    try {
+      // Set canvas size to match video
+      canvas.width = video.videoWidth || 1280;
+      canvas.height = video.videoHeight || 720;
+      
+      // Draw video frame to canvas
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      
+      // Convert to data URL
+      const dataURL = canvas.toDataURL('image/jpeg', 0.92);
+      
+      // Flash effect
+      setFlash(true);
+      setTimeout(() => setFlash(false), 200);
+      
+      // Stop camera
+      stopCamera();
+      
+      // Store captured image
+      setCapturedImage(dataURL);
+      setShowPreview(true);
+      
+    } catch (error) {
+      console.error('Capture error:', error);
+      alert('Failed to capture image. Please try again.');
+    }
+  }, [stopCamera]);
+
+  // Confirm and save captured image
+  const confirmImage = useCallback(() => {
+    if (!capturedImage || !coverKey) {
+      alert('No image to save. Please capture an image first.');
+      return;
+    }
+    
+    // Save image to section data
+    setSectionData(prev => ({
+      ...prev,
+      [coverKey]: { ...prev[coverKey], image: capturedImage }
+    }));
+    
+    // Reset states
+    setCapturedImage(null);
+    setShowPreview(false);
+    setCameraOpen(false);
+    
+    console.log('Image saved for', coverKey);
+  }, [capturedImage, coverKey]);
+
+  // Retake image
+  const retakeImage = useCallback(() => {
+    setCapturedImage(null);
+    setShowPreview(false);
+    // Reopen camera
+    openCamera();
+  }, [openCamera]);
+
+  // Handle file upload
   const handleUpload = useCallback((e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -146,27 +212,31 @@ export default function RexiFitApp() {
           ...prev,
           [coverKey]: { ...prev[coverKey], image: ev.target.result }
         }));
+        console.log('Image uploaded for', coverKey);
       }
+    };
+    reader.onerror = () => {
+      alert('Failed to read file. Please try again.');
     };
     reader.readAsDataURL(file);
     e.target.value = "";
   }, [coverKey]);
 
   // ── STATE HELPERS ────────────────────────────────────────────────────────────
-  const setMeasurement = useCallback((secKey, fieldKey, value) => {
-    setSectionData(prev => ({
-      ...prev,
-      [secKey]: {
-        ...prev[secKey],
-        measurements: { ...prev[secKey].measurements, [fieldKey]: value }
-      }
+  const setSection = useCallback((key, field, value) => {
+    setSectionData(prev => ({ 
+      ...prev, 
+      [key]: { ...prev[key], [field]: value } 
     }));
   }, []);
 
-  const setSection = useCallback((key, field, value) => {
+  const setMeasurement = useCallback((secKey, fieldKey, value) => {
     setSectionData(prev => ({
       ...prev,
-      [key]: { ...prev[key], [field]: value }
+      [secKey]: { 
+        ...prev[secKey], 
+        measurements: { ...prev[secKey].measurements, [fieldKey]: value } 
+      }
     }));
   }, []);
 
@@ -187,7 +257,6 @@ export default function RexiFitApp() {
       `Date    : ${jobDate}`,
       "───────────────────────────────────",
     ];
-    
     COVER_KEYS.forEach(key => {
       const sec = SECTIONS[key];
       const sd = sectionData[key];
@@ -198,7 +267,6 @@ export default function RexiFitApp() {
       });
       if (sd.notes) lines.push(`  Notes: ${sd.notes}`);
     });
-    
     lines.push("", "═══════════════════════════════════");
     const blob = new Blob([lines.join("\n")], { type: "text/plain" });
     const a = document.createElement("a");
@@ -206,15 +274,6 @@ export default function RexiFitApp() {
     a.download = `rexifit-${brandName.replace(/ /g, "_")}-${jobDate}.txt`;
     a.click();
   }, [brandName, regNo, jobDate, sectionData]);
-
-  // ── EFFECTS ──────────────────────────────────────────────────────────────────
-  // Only run this effect when cameraOpen changes
-  useEffect(() => {
-    if (cameraOpen && videoRef.current && streamRef.current) {
-      videoRef.current.srcObject = streamRef.current;
-      videoRef.current.play().catch(() => {});
-    }
-  }, [cameraOpen]); // ✅ Added proper dependency
 
   // ── SHARED STYLES ────────────────────────────────────────────────────────────
   const card = { background: "white", borderRadius: 14, padding: 20, marginBottom: 14, border: `1px solid ${T.border}` };
@@ -226,13 +285,19 @@ export default function RexiFitApp() {
   // ─────────────────────────────────────────────────────────────────────────────
   // CAMERA OVERLAY
   // ─────────────────────────────────────────────────────────────────────────────
-  if (cameraOpen) {
+  if (cameraOpen && !showPreview) {
     return (
       <div style={{ position: "fixed", inset: 0, background: "#000", display: "flex", flexDirection: "column", zIndex: 9999 }}>
         {flash && <div style={{ position: "absolute", inset: 0, background: "rgba(255,255,255,0.9)", zIndex: 20, pointerEvents: "none" }} />}
 
         <div style={{ position: "relative", flex: 1, overflow: "hidden" }}>
-          <video ref={videoRef} style={{ width: "100%", height: "100%", objectFit: "cover" }} playsInline muted />
+          <video 
+            ref={videoRef} 
+            style={{ width: "100%", height: "100%", objectFit: "cover" }} 
+            playsInline 
+            muted 
+            autoPlay
+          />
 
           <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
             <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.5)" }} />
@@ -288,7 +353,41 @@ export default function RexiFitApp() {
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // MAIN APP RENDER - Rest of your component here (kept the same)
+  // CAPTURE PREVIEW
+  // ─────────────────────────────────────────────────────────────────────────────
+  if (showPreview && capturedImage) {
+    return (
+      <div style={{ position: "fixed", inset: 0, background: "#0D0D0D", display: "flex", flexDirection: "column", zIndex: 9999 }}>
+        <div style={{ padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #1E1E1E" }}>
+          <button onClick={retakeImage} style={{ background: "none", border: "none", color: T.yellow, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+            ← Retake
+          </button>
+          <span style={{ color: "white", fontWeight: 700, fontSize: 15 }}>Review Photo</span>
+          <button onClick={confirmImage}
+            style={{ background: T.yellow, border: "none", color: T.ink, fontWeight: 800, padding: "8px 18px", borderRadius: 20, cursor: "pointer", fontSize: 14 }}>
+            Use Photo ✓
+          </button>
+        </div>
+
+        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 12, overflow: "hidden" }}>
+          <img 
+            src={capturedImage} 
+            alt="Captured" 
+            style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: 8, objectFit: "contain" }} 
+          />
+        </div>
+
+        <div style={{ padding: "16px", background: "#111", borderTop: "1px solid #1E1E1E", textAlign: "center" }}>
+          <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 12, margin: 0 }}>
+            Tap "Use Photo" to save or "Retake" to try again
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // MAIN APP
   // ─────────────────────────────────────────────────────────────────────────────
   return (
     <div style={{ minHeight: "100vh", background: T.paper, fontFamily: "'Helvetica Neue', Arial, system-ui, sans-serif", color: T.ink }}>
@@ -587,15 +686,8 @@ export default function RexiFitApp() {
             </div>
 
             <button onClick={() => {
-              setBrand(""); 
-              setCustomBrand(""); 
-              setRegNo(""); 
-              setStep(0);
-              setSectionData({ 
-                driver: initSection(), 
-                passenger: initSection(), 
-                rooftop: initSection() 
-              });
+              setBrand(""); setCustomBrand(""); setRegNo(""); setStep(0);
+              setSectionData({ driver: initSection(), passenger: initSection(), rooftop: initSection() });
             }} style={{ ...btn(T.paper, T.muted, false), width: "100%", marginTop: 10, border: `1px solid ${T.border}` }}>
               + New Measurement Job
             </button>
