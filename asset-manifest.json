@@ -1,0 +1,15 @@
+{
+  "files": {
+    "main.css": "/rexifit-measure/static/css/main.e6c13ad2.css",
+    "main.js": "/rexifit-measure/static/js/main.66f8cbfd.js",
+    "static/js/453.46b8cd6b.chunk.js": "/rexifit-measure/static/js/453.46b8cd6b.chunk.js",
+    "index.html": "/rexifit-measure/index.html",
+    "main.e6c13ad2.css.map": "/rexifit-measure/static/css/main.e6c13ad2.css.map",
+    "main.66f8cbfd.js.map": "/rexifit-measure/static/js/main.66f8cbfd.js.map",
+    "453.46b8cd6b.chunk.js.map": "/rexifit-measure/static/js/453.46b8cd6b.chunk.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.e6c13ad2.css",
+    "static/js/main.66f8cbfd.js"
+  ]
+}
